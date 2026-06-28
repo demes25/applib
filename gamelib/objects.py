@@ -2,10 +2,10 @@
 # GameLib
 # Objects and Structures
 
-from typing import Any, Union, Iterable
+from typing import Any, Union, Iterable, TYPE_CHECKING, Callable
 from abc import ABC, abstractmethod
-from collections import UserList
-from gamelib.utils import Surface, Coords, new_surface, add, sub 
+from gamelib.utils import Surface, Coords, new_surface, add, sub, fill, phase
+from gamelib.colors import Color
 
 
 RECT_EDGES = ['topleft', 'topright', 'bottomleft', 'bottomright', 'right', 'left', 'top', 'bottom', 'center']
@@ -13,6 +13,22 @@ RECT_EDGES = ['topleft', 'topright', 'bottomleft', 'bottomright', 'right', 'left
 # wraps a surface to be able to blit/move easier.
 # also makes registering hits easier.
 class Object:
+    if TYPE_CHECKING:
+        topleft : Coords
+        topright : Coords 
+        bottomleft : Coords
+        bottomright : Coords
+
+        center : Coords
+
+        right : int 
+        left : int 
+        top : int 
+        bottom : int 
+
+        shape : Coords
+        
+
     def __init__(
         self, 
         surface_or_shape : Surface | Coords, 
@@ -29,32 +45,36 @@ class Object:
         self.origin = origin
 
         super().__init__()
+    
 
+    # we make it so that any reference to the edges of the surface points immediately through self.rect
+    def __getattr__(self, name : str) -> Any:
+        if name in RECT_EDGES:
+            return getattr(self.rect, name)
+        elif name == 'shape':
+            return self.rect.size
+        raise AttributeError(name)
+    
+    def __setattr__(self, name: str, value: Any):
+        if name in RECT_EDGES:
+            setattr(self.rect, name, value)
+        elif name == 'shape':
+            raise PermissionError('Unable to alter object')
+        else:
+            object.__setattr__(self, name, value)
+
+
+    def _recurse_color_func(self, _color_func : Callable[['Object', Color], None], color : Color, recursion_depth : int = 0):
+        _color_func(self, color)
 
     # we set the origin.
     # this is called under-the-hood for environments
     def _set_origin(self, origin : Coords = (0, 0)):
         self.origin = origin
     
-    def _shift_origin(self, shift : Coords = (0, 0)):
-        self.origin = add(self.origin, shift)
+    def _shift_origin(self, displacement : Coords):
+        self.origin = add(self.origin, displacement)
 
-
-    # we make it so that any reference to the edges of the surface points immediately through self.rect
-    
-    def __getattr__(self, name : str) -> Any:
-        if name in RECT_EDGES:
-            return getattr(self.rect, name)
-        raise AttributeError(name)
-    
-    def __setattr__(self, name: str, value: Any):
-        if name in RECT_EDGES:
-            setattr(self.rect, name, value)
-        else:
-            object.__setattr__(self, name, value)
-    
-
-    # convert coordinates
 
     def _global_to_local(self, coords : Coords) -> Coords:        
         return (
@@ -68,7 +88,22 @@ class Object:
             coords[1] + self.origin[1]
         )
 
-        
+    
+    def phase(self, color : Color):
+        self.surface = phase(self.surface, color)
+    
+    def tint(self, color : Color):
+        _tinter = new_surface(self.rect.size)
+        _tinter.fill(color.rgba)
+        self.surface.blit(_tinter, (0, 0))
+
+    def fill(self, color : Color):
+        self.surface = fill(self.surface, color)
+
+    def shift(self, displacement : Coords):
+        self.rect.topleft = add(self.rect.topleft, displacement)
+
+
     # returns true if both (or the one given) sets of coordinates collide with this object
     
     def hits(self, coords : Coords, prev_coords : Coords | None = None, from_global : bool = True) -> bool:
@@ -83,6 +118,7 @@ class Object:
         else:
             return self.rect.collidepoint(coords) and self.rect.collidepoint(prev_coords)
     
+
     def blit_onto(self, dest : Union['Object', Surface]):
         if isinstance(dest, Object):
             dest.surface.blit(self.surface, self.rect)
@@ -192,20 +228,26 @@ class Structure(Object, ABC):
     def _internal_iter(self) -> Iterable[Object]:
         pass 
 
-
-    def _shift_origin(self, shift : Coords = (0, 0)):
-        self._global_topleft = add(self._global_topleft, shift)
-        super()._shift_origin(shift)
+    def _shift_origin(self, displacement : Coords):
+        self._global_topleft = add(self._global_topleft, displacement)
+        super()._shift_origin(displacement)
 
         for internal in self._internal_iter:
-            internal._shift_origin(shift)
+            internal._shift_origin(displacement)
 
     def _set_origin(self, origin : Coords = (0, 0)):  
         self._global_topleft = add(origin, self.rect.topleft)
 
         shift = sub(origin, self.origin)
         self._shift_origin(shift)
-    
+
+
+    def _recurse_color_func(self, _color_func : Callable[['Object', Color], None], color : Color, recursion_depth : int = 0):
+        _color_func(self, color)
+        if recursion_depth != 0:
+            for internal in self._internal_iter:
+                internal._recurse_color_func(_color_func, color, recursion_depth-1)
+
 
     # sets the origin of a newly adding internal object
     def _wrap(self, val : Object):
@@ -220,16 +262,35 @@ class Structure(Object, ABC):
     def __setattr__(self, name: str, value: Any):
         # if the value is a RECT_EDGE, we adjust this rect and then adjust origins     
         if name in RECT_EDGES:
-            old_origin = self.rect.topleft 
+            old_tl = self.rect.topleft 
             setattr(self.rect, name, value)
-            new_origin = self.rect.topleft 
-
-            shift = sub(new_origin, old_origin)
+            new_tl = self.rect.topleft 
+    
+            displacement = sub(new_tl, old_tl)
+            self._global_topleft = add(self._global_topleft, displacement)
+            
             for internal in self._internal_iter:
-                internal._shift_origin(shift)
+                internal._shift_origin(displacement)
         else:
             object.__setattr__(self, name, value)
+
     
+    def phase(self, color : Color, recursion_depth : int = 0):
+        return self._recurse_color_func(Object.phase, color, recursion_depth)
+    
+    def tint(self, color : Color, recursion_depth : int = 0):
+        return self._recurse_color_func(Object.tint, color, recursion_depth)
+
+    def fill(self, color : Color, recursion_depth : int = 0):
+        return self._recurse_color_func(Object.fill, color, recursion_depth)
+
+    
+    def shift(self, displacement : Coords):
+        super().shift(displacement)
+        self._global_topleft = add(self._global_topleft, displacement)
+        
+        for internal in self._internal_iter:
+            internal._shift_origin(displacement)
 
     def blit_onto(self, dest : Union['Object', Surface]):
         surface = self.surface.copy()
@@ -243,46 +304,49 @@ class Structure(Object, ABC):
             dest.blit(surface, self.rect)
 
     
+from collections import UserList, UserDict
 
 # an array that contains other objects, adjusts origins, etc.
 # stores contained objects in a list.
-class Array(Structure):
+class Array(Structure, UserList[Object]):
     def __init__(
         self,
         surface_or_shape : Surface | Coords,
         origin : Coords = (0, 0)
     ):
         super().__init__(surface_or_shape, origin=origin)
+        UserList.__init__(self)
 
-        self._internals : list[Object] = []
 
     @property
     def _internal_iter(self) -> Iterable[Object]:
-        return self._internals
-    
+        return self.data
 
-    def __len__(self):
-        return len(self._internals)
-
-    def __getitem__(self, key : int):
-        return self._internals[key]
-
-    # internal objects are blitted in the order of self._internals
+    # internal objects are blitted in the order of self.data
     def __setitem__(self, key : int, val : Object):
+        assert isinstance(key, int)
+
         self._wrap(val)
-        self._internals[key] = val 
+        self.data[key] = val 
+
+    def __iadd__(self, vals : Iterable[Object]):
+        vals = list(vals)
+        self._wrap_arr(vals)
+        self.data.extend(vals)
+        return self
 
     def append(self, val : Object):
         self._wrap(val)
-        self._internals.append(val)
+        self.data.append(val)
     
     def extend(self, vals : Iterable[Object]):
+        vals = list(vals)
         self._wrap_arr(vals)
-        self._internals.extend(vals)
+        self.data.extend(vals)
 
     def insert(self, key : int, val : Object):
         self._wrap(val)
-        self._internals.insert(key, val)
+        self.data.insert(key, val)
     
 
     # returns the index of the hit object. -1 if none hits.
@@ -298,7 +362,7 @@ class Array(Structure):
         if prev_coords is not None:
             prev_coords = sub(prev_coords, self.rect.topleft)
 
-        for index, internal in enumerate(self._internals):
+        for index, internal in enumerate(self.data):
             if internal.hits(coords, prev_coords, from_global=False):
                 return index 
         
@@ -308,43 +372,24 @@ class Array(Structure):
 
 # an environment which contains other objects, adjusts origins, etc
 # stores contained objects in a dict (mutable).
-class Environment(Structure):
+class Environment(Structure, UserDict[str, Object]):
     def __init__(
         self, 
         surface_or_shape : Surface | Coords,
         origin : Coords = (0, 0)
     ):
         super().__init__(surface_or_shape, origin=origin)
-
-        self._internals : dict[str, Object] = {} # the internal objects in this environment
-
+        UserDict.__init__(self)
 
     @property
     def _internal_iter(self) -> Iterable[Object]:
-        return self._internals.values()
+        return self.data.values()
 
-    # if we look up an internal object, we accommodate   
-    def __getattr__(self, name : str):
-        try:
-            return super().__getattr__(name)
-        except AttributeError:
-            _internal = self._internals.get(name, None)
-            if _internal is None:
-                raise
-            else:
-                return _internal 
-    
-    # internal objects are blitted in order of definition
-    def __setattr__(self, name: str, value: Any):
-        # if the value is an Object, we need to add it to the internals and adjust its origin
-        if isinstance(value, Object):
-            self._wrap(value)
-            self._internals[name] = value 
-        # if the value is a RECT_EDGE, we adjust this rect and then adjust origins     
-        else:
-            super().__setattr__(name, value)
-    
-
+    # internal objects are blitted in the order of self._internals
+    def __setitem__(self, key : str, val : Object):
+        self._wrap(val)
+        self.data[key] = val
+     
     # returns the key of the hit object. None if none hits
     def which_hits(self, coords : Coords, prev_coords : Coords | None, from_global : bool = True) -> str | None:
         # we transmit to local coordinates by default
@@ -358,7 +403,7 @@ class Environment(Structure):
         if prev_coords is not None:
             prev_coords = sub(prev_coords, self.rect.topleft)
 
-        for key, internal in self._internals.items():
+        for key, internal in self.data.items():
             if internal.hits(coords, prev_coords, from_global=False):
                 return key 
         

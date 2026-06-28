@@ -2,52 +2,85 @@
 # GameLib
 # Colors
 
+from dataclasses import dataclass
+from functools import cached_property
+
+@dataclass(frozen=True)
 class Color:
-    '''Holds a color as separate R, G, B, and alpha values. May be converted to a hexadecimal color string using str(...), to a tuple of four integers by accessing the "rgba" attribute, or a tuple of three integers by accessing the "rgb" attribute.'''
+    '''Holds a color as separate R, G, B, and alpha values. May be converted to a hexadecimal color string using the .hex property, 
+    to a tuple of four integers using the .rgba property, or a tuple of three integers using the .rgb property.'''
 
-    __slots__ = ('_r', '_g', '_b', '_alpha', '_string', 'rgb', 'rgba')
+    r : int 
+    g : int 
+    b : int 
+    alpha : int = 255
 
-    def __init__(self, RGBA : str):
+    @classmethod
+    def from_hex(cls, hex : str) -> 'Color':
         '''Parameters
 ----------
-RGBA : str
+hex : str
     A string that represents the desired color in hexadecimal, of the form
 
     >>> '#RRGGBBaa',
 
     where aa is optional and represents the alpha value.
 ''' 
-        self._string = RGBA 
-        _regex_string = RGBA.removeprefix('#')
+        s = hex.lstrip("#")
 
-        match len(_regex_string):
-            case 8:
-                self._r = int(_regex_string[:2], 16)
-                self._g = int(_regex_string[2:4], 16)
-                self._b = int(_regex_string[4:6], 16)
-                self._alpha = int(_regex_string[6:], 16)
-            
-            case 6:
-                self._r = int(_regex_string[:2], 16)
-                self._g = int(_regex_string[2:4], 16)
-                self._b = int(_regex_string[4:6], 16)
-                self._alpha = 255
-            
-            case _:
-                raise ValueError('Color string must be of the form "#RRGGBBaa".')
+        if len(s) == 6:
+            return Color(
+                r=int(s[0:2], 16), 
+                g=int(s[2:4], 16), 
+                b=int(s[4:6], 16)
+            )
         
-        self.rgba = (
-            self._r,
-            self._g,
-            self._b,
-            self._alpha
-        )
+        elif len(s) == 8:
+            return Color(
+                r=int(s[0:2], 16),
+                g=int(s[2:4], 16),
+                b=int(s[4:6], 16),
+                alpha=int(s[6:8], 16),
+            )
+        else:
+            raise ValueError("Invalid hex color")
 
-        self.rgb = (
-            self._r,
-            self._g,
-            self._b
-        )
+    @cached_property
+    def rgb(self) -> tuple[int, int, int]:
+        return (self.r, self.g, self.b)
+    
+    @cached_property
+    def rgba(self) -> tuple[int, int, int]:
+        return (self.r, self.g, self.b, self.alpha)
+    
+    @cached_property
+    def hex(self) -> str:
+        '''A string containing this color in hexadecimal, of the form
+        >>> '#RRGGBBaa'
+        '''
+        fullnum = self.b + 256 * self.g + 65536 * self.r
 
-    def __repr__(self):
-        return self._string
+        if self.alpha != 255:
+            fullnum = self.alpha + 256*fullnum
+
+        hexstr = hex(fullnum)
+        hexstr = '#' + hexstr.removeprefix('0x')
+
+        return hexstr
+
+    def new_opacity(self, alpha : int = 255) -> 'Color':
+        '''Returns a new color with the same RGB values but with the specified alpha value.
+        
+        Parameters
+        ---------
+            alpha : int 
+                The desired alpha value, between 0 and 255.
+        
+        Returns
+        ------
+            >>> Color(self.r, self.g, self.b, alpha)
+        '''
+        return Color(self.r, self.g, self.b, alpha)
+
+
+        
