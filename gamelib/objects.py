@@ -185,6 +185,7 @@ class Structure(Object, ABC):
         origin : Coords = (0, 0)
     ):
         super().__init__(surface_or_shape, origin=origin)
+        self._global_topleft = add(origin, self.rect.topleft)
     
     @property
     @abstractmethod
@@ -193,25 +194,27 @@ class Structure(Object, ABC):
 
 
     def _shift_origin(self, shift : Coords = (0, 0)):
+        self._global_topleft = add(self._global_topleft, shift)
         super()._shift_origin(shift)
+
         for internal in self._internal_iter:
             internal._shift_origin(shift)
 
-    def _set_origin(self, origin : Coords = (0, 0)):   
+    def _set_origin(self, origin : Coords = (0, 0)):  
+        self._global_topleft = add(origin, self.rect.topleft)
+
         shift = sub(origin, self.origin)
         self._shift_origin(shift)
     
 
     # sets the origin of a newly adding internal object
     def _wrap(self, val : Object):
-        new_origin = add(self.origin, self.rect.topleft)
-        val._set_origin(new_origin)
+        val._set_origin(self._global_topleft)
 
     # sets the origin of a list of newly adding internal objects
     def _wrap_arr(self, vals : Iterable[Object]):
-        new_origin = add(self.origin, self.rect.topleft)
         for val in vals:
-            val._set_origin(new_origin)
+            val._set_origin(self._global_topleft)
 
 
     def __setattr__(self, name: str, value: Any):
