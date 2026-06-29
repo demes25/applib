@@ -5,28 +5,63 @@
 from typing import Dict, List 
 from pathlib import Path 
 import pygame as pg 
-from gamelib.utils import Color, Coords, Surface, new_surface, isolate_alpha_blend
+from gamelib.utils import Color, Coords, Surface, new_surface, alpha_blend, reshape
 from collections import UserDict
 
 
 # we load an ALPHABET, as well as some additional metadata.
 # the alphabet MUST be monospaced and have a set size ratio. 
 class Alphabet(UserDict):
+    '''An Alphabet -- a dictionary of glyphs structured like
+    >>> {
+            char : glyph
+        }
+    
+    where chars are single-character strings, and the glyphs are Surfaces. 
+    
+    This requires a specific ordering/protocol. Namely, the glyphs must all be of equal shape, say (n, m), and are imported from an image file
+    of size (95*n, m), where each consecutive region of width n contains a glyph for a character and parallels the ASCII encoding protocol. 
+
+    The image file must be a contiguous image of the following 95 characters in the following order, all located directly side-by-side with no spaces in between:
+
+    >>> [space] ! " # $ % & ' ( ) * + , - . / 0 1 2 3 4 5 6 7 8 9 : ; < = > ? @ A B C D E F G H I J K L M N O P Q R S T U V W X Y Z [ \ ] ^ _ ` a b c d e f g h i j k l m n o p q r s t u v w x y z { | } ~ 
+    '''
     ASCII = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
     ASCII_COUNT = len(ASCII)
 
     # saves a template for the given font size, includes divisors if so wanted
     # the general font template 
     @staticmethod
-    def template(pixels : Coords, include_placeholders : bool = True, path : str | Path | None = None) -> Surface:
-        width, height = pixels 
+    def template(glyph_shape : Coords, include_placeholders : bool = True, path : str | Path | None = None) -> Surface:
+        '''Creates a template for an alphabet with the given letter shape. Includes placeholder characters if desired. If given a path object, saves
+        this template to the given path.
+        
+        Parameters
+        ----------
+            glyph_shape : Coords 
+                The shape of each letter
+            include_placeholders : bool
+                If True, we include placeholders where each glyph should go
+            path : str | Path | None
+                If not None, saves this template to the given file path.
+
+        Returns
+        -------
+        A transparent Surface of shape
+        >>> (95*glyph_width, glyph_height),
+
+        where
+        >>> glyph_width, glyph_height == glyph_shape 
+        '''
+        
+        width, height = glyph_shape 
         total_width = width * Alphabet.ASCII_COUNT
 
         template = new_surface((total_width, height))
 
         if include_placeholders:
             # creates a default placeholder
-            placeholder = new_surface(pixels)
+            placeholder = new_surface(glyph_shape)
 
             single_pixel = new_surface((1, 1))
             single_pixel.fill((127, 127, 127))
@@ -52,60 +87,88 @@ class Alphabet(UserDict):
         path : str | Path, # the file name of the font file. should be an image with dimensions (font_width * 95, font_height)
                            # which is a contiguous image of all writable symbols in ASCII.
     ):  
+        '''Parameters
+        ----------
+            path : str | Path
+                The file path of the image to load from.
+        '''
         # we load the font image
         font_image = pg.image.load(path)
         font_rect = font_image.get_rect()
 
         # find the dimensions of each letter
 
-        font_height = self.pixel_height = font_rect.height 
+        glyph_height = self.glyph_height = font_rect.height 
 
         # if the font_width is not a multiple of 95, this does not fit our requirements
         if font_rect.width % Alphabet.ASCII_COUNT != 0:
-            raise Exception('Alphabet image width must be a multiple of 95.')
+            raise ValueError('Alphabet image width must be a multiple of 95.')
         
-        font_width = self.pixel_width = font_rect.width//Alphabet.ASCII_COUNT
+        glyph_width = self.glyph_width = font_rect.width//Alphabet.ASCII_COUNT
 
 
         # store the specs per-letter
-        self.pixels = (font_width, font_height) # the dimensions of the font, in pixels.
+        self.glyph_shape = (glyph_width, glyph_height) # the dimensions of the font, in pixels.
 
         # the rect which we will use to parse the letters of the alphabet
-        letter_rect = pg.rect.Rect(0, 0, font_width, font_height)
+        glyph_rect = pg.rect.Rect(0, 0, glyph_width, glyph_height)
 
         super().__init__()
 
         # we store the alphabet
         for char in Alphabet.ASCII:
-            self.data[char] = font_image.subsurface(letter_rect)    
-            letter_rect.left += font_width
+            self.data[char] = font_image.subsurface(glyph_rect)    
+            glyph_rect.left += glyph_width
 
     
     def __setitem__(self, _, __):
-        raise Exception('Alphabet objects are immutable.')
+        raise PermissionError('Alphabet objects are immutable.')
     
 
     def get_scaled(
         self,
-        pixels : Coords | None, # pixel-dimensions height of each letter
+        shape : Coords | None, # pixel-dimensions height of each letter
     ) -> Dict[str, Surface]:
+        '''Returns a scaled copy of this dictionary.
         
-        if pixels is None:
+        Parameters
+        ----------
+            shape : Coords | None
+                If None, returns a copy of this dictionary. Otherwise, returns a scaled copy where each glyph is reshaped to this shape.
+
+        Returns
+        -------
+            >>> self.copy() if shape is None else {
+                char : reshape(glyph, shape) for char, glyph in self.items()
+            } 
+        '''
+        
+        if shape is None:
             return self.data.copy()
         else:    
             return {
-                char : pg.transform.scale(letter, size=pixels) for char, letter in self.items()
+                char : reshape(glyph, shape=shape) for char, glyph in self.items()
             }
         
     
 
 # carries an instance of alphabet which is sized in some way.
 class Font(UserDict):
+    '''A dictionary wrapper that stores a scaled Alphabet. Equipped with text-to-Surface rendering funcionality.
+    '''
+
     def __init__(
         self,
         alphabet_or_path : str | Path | Alphabet, # the alphabet object or the path to its generating image
         fontsize : int, # pixel height of each letter
     ):
+        '''Parameters
+        ----------
+            alphabet_or_path : str | Path | Alphabet
+                The alphabet object for this font, or a path to the file containing the alphabet image.
+            fontsize : int
+                The target height of each glyph. Scales the width to maintain relative proportions.
+        '''
         
         super().__init__()
 
@@ -119,44 +182,67 @@ class Font(UserDict):
         )
     
     def __setitem__(self, _, __):
-        raise Exception('Font entries are immutable.')
+        raise PermissionError('Font entries are immutable.')
     
     def set(
         self,
         fontsize : int
     ):  
-        self.pixel_height = fontsize
-        self.pixel_width = (self.alphabet.pixel_width * fontsize) // self.alphabet.pixel_height
+        '''Sets this font to the given fontsize. Updates the internal dictionary and dimension info.
         
-        self.pixels = (self.pixel_width, self.pixel_height)
+        Parameters
+        ----------
+            fontsize : int 
+                The target height of each glyph. Scales the width to maintain relative proportions.
+        '''
+        self.glyph_height = fontsize
+        self.glyph_width = (self.alphabet.glyph_width * fontsize) // self.alphabet.glyph_height
+        
+        self.glyph_shape = (self.glyph_width, self.glyph_height)
 
-        self.gap_size = fontsize // self.alphabet.pixel_height # we leave gaps, equivalent to one alphabet-pixel in between.
+        self.gap_size = fontsize // self.alphabet.glyph_height # we leave gaps, equivalent to one alphabet-pixel in between.
 
-        self.data = self.alphabet.get_scaled(pixels=self.pixels)
+        self.data = self.alphabet.get_scaled(shape=self.glyph_shape)
 
     
     def render(
         self,
         text : str,
         color : Color | None = None,
-        opacity : int = 255,
         background_color : Color | None = None
-    ):
+    ) -> Surface:
+        '''Renders the given text into a Surface. If a color is specified, alpha-blends the text with the given color (see utils.alpha_blend). If a background is specified,
+        fills the background with the given color.
         
-        letter_and_gap = self.pixel_width + self.gap_size
-        width = letter_and_gap * len(text) - self.gap_size
-        surface = new_surface((width, self.pixel_height))
+        Parameters
+        ----------
+            text : str
+                The text to render.
+            color : Color | None 
+                If None, retains the original color of the Alphabet glyphs. Otherwise alpha-blends each glyph with the given color.
+            background_color : Color | None
+                If None, retains transparent background. Otherwise fills the background with the given color.
+        
+        Returns
+        -------
+            The rendered text Surface.
+        '''
+        
+        glyph_and_gap = self.glyph_width + self.gap_size
+        width = glyph_and_gap * len(text) - self.gap_size
+        surface = new_surface((width, self.glyph_height))
 
         X = 0
 
         for char in text:
             surface.blit(self[char], (X, 0))
-            X += self.pixel_width + self.gap_size
+            X += self.glyph_width + self.gap_size
         
-        surface = isolate_alpha_blend(surface=surface, color=color, opacity=opacity)
+        if color is not None:
+            surface = alpha_blend(surface=surface, color=color)
 
         if background_color is not None:
-            background = new_surface((width, self.pixel_height))
+            background = new_surface((width, self.glyph_height))
             background.fill(background_color)
             background.blit(surface, (0, 0))
             return background
@@ -165,13 +251,27 @@ class Font(UserDict):
             return surface
     
     
-    def as_lines(self, text : str, letters_per_line : int) -> List[str]:
+    def as_lines(self, text : str, glyphs_per_line : int) -> List[str]:
+        '''Splits the given text into lines according to the specified number of glyphs per line. Avoids mid-word line breaks when possible.
+        
+        Parameters
+        ----------  
+            text : str 
+                The text to split.
+            
+            glyphs_per_line : int
+                The maximum number of glyphs per line.
+                
+        Returns
+        -------
+            The list of lines, as strings.
+        '''
         lines = []
 
         while text != '':
-            if len(text) > letters_per_line:
-                candidate = text[:letters_per_line]
-                text = text[letters_per_line:]
+            if len(text) > glyphs_per_line:
+                candidate = text[:glyphs_per_line]
+                text = text[glyphs_per_line:]
             else:
                 candidate = text
                 text = ''
@@ -194,187 +294,3 @@ class Font(UserDict):
                 lines.append(candidate)
         
         return lines
-
-       
-        
-# carries a buffer that dynamically writes onto a fixed-width object.
-class TextEntry:
-    def __init__(
-        self, 
-        font : Font, 
-        pixel_width : int, # a fixed width for the font environment
-
-        color : Color | None = None,
-        opacity : int = 255
-    ):
-        self.letter_width = (pixel_width // (font.pixel_width + font.gap_size))
-        self.pixel_width =  self.letter_width * (font.pixel_width + font.gap_size)
-
-        self.font = font 
-
-        self.string : str = ''
-        
-        self.pointer = 0
-            
-        _pointer = new_surface((font.gap_size, font.pixel_height))
-        _pointer.fill((0, 0, 0))
-        self.pointer_surface = isolate_alpha_blend(_pointer, color=color, opacity=200)
-
-        self.pointer_coords = (0, 0)
-        self.pointer_shown = False
-
-        self.lengths = []
-
-        self.surface = new_surface((self.pixel_width, self.pixel_height))
-
-        self.color = color 
-        self.opacity = opacity
-    
-    @property
-    def pixel_height(self) -> int:
-        return max(len(self.lengths), 1) * (self.font.pixel_height + self.font.gap_size) - self.font.gap_size
-
-    def pointer_to_coord(self, pointer : int) -> Coords:
-        y_coord = 0
-
-        for l in self.lengths:
-            if pointer > l:
-                pointer -= l
-                y_coord += self.font.pixel_height + self.font.gap_size
-        
-        x_coord = pointer * (self.font.pixel_width + self.font.gap_size) - self.font.gap_size
-
-        return (x_coord, y_coord)
-
-    def coord_to_pointer(self, coords : Coords):
-        x_coord, y_coord = coords
-
-        height = y_coord // (self.font.pixel_height + self.font.gap_size)
-
-        pointer = x_coord // (self.font.pixel_width + self.font.gap_size)
-        if height > 0:
-            pointer += sum(self.lengths[:height])
-
-
-    def update(self):
-        lines = self.font.as_lines(self.string, self.letter_width)
-        self.lengths = [len(line) for line in lines]
-
-        Y = 0
-        surface = new_surface((self.pixel_width, self.pixel_height))
-
-        for line in lines:
-            surface.blit(
-                self.font.render(line), (0, Y)
-            )
-            Y += (self.font.pixel_height + self.font.gap_size)
-
-        self.surface = isolate_alpha_blend(surface, color=self.color, opacity=self.opacity)
-
-        if self.pointer_shown:
-            self.surface.blit(self.pointer_surface, self.pointer_coords)
-        
-
-    def move_ptr_left(self):
-        if self.pointer > 0:
-            self.pointer -= 1
-            self.pointer_coords = self.pointer_to_coord(self.pointer)
-        
-        if self.show_pointer:
-            self.update()
-    
-    def move_ptr_right(self):
-        if self.pointer < len(self.string):
-            self.pointer += 1
-            self.pointer_coords = self.pointer_to_coord(self.pointer)
-        
-        if self.show_pointer:
-            self.update()
-    
-
-    def show_pointer(self):
-        if not self.pointer_shown:
-            self.surface.blit(self.pointer_surface, self.pointer_coords)
-            self.pointer_shown = True 
-    
-    def hide_pointer(self):
-        if self.pointer_shown:
-            self.pointer_shown = False 
-            self.update()
-
-
-    def backspace(self):
-        if self.pointer > 0:
-            remainder = self.string[self.pointer:]
-            self.pointer -= 1
-            self.pointer_coords = self.pointer_to_coord(self.pointer)
-
-            self.string = self.string[:self.pointer] + remainder
-            self.update()
-        
-    
-    def register(self, text : str):
-        self.string = self.string[:self.pointer] + text + self.string[self.pointer:]
-        self.pointer += len(text)
-        self.pointer_coords = self.pointer_to_coord(self.pointer)
-
-        self.update()
-
-    def reset(self) -> str:
-        string = self.string
-
-        self.string = '' 
-        self.pointer = 0
-        self.pointer_coords = (0, 0)
-
-        self.lengths = []
-
-        self.surface = new_surface((self.pixel_width, self.pixel_height))
-
-        return string 
-    
-
-class TextRecord:
-    def __init__(
-        self, 
-        font : Font,
-        pixel_width : int, # a fixed width for the environment
-        text_gap_ratio : float = 5.0 # the ratio of the gap between texts to the gap between lines
-    ):
-        self.letter_width = (pixel_width // (font.pixel_width + font.gap_size))
-        
-        self.pixel_width =  self.letter_width * (font.pixel_width + font.gap_size)
-        self.pixel_height = 0
-
-        self.surface = new_surface((self.pixel_width, font.pixel_height))
-        self.font = font 
-
-        self._additional_gap = int(text_gap_ratio*font.gap_size)
-
-
-    def register(self, string : str, color : Color | None = None, opacity : int = 255):
-        lines = self.font.as_lines(string, letters_per_line=self.letter_width)
-
-        height_per_letter = self.font.pixel_height + self.font.gap_size
-
-        add_height = len(lines) * height_per_letter + self._additional_gap
-
-        current_height = self.pixel_height
-        updated_surface = new_surface((self.pixel_width, self.pixel_height + add_height))
-
-        if current_height != 0:
-            updated_surface.blit(self.surface, (0, 0))
-        
-        for line in lines:
-            line_surface = self.font.render(line, color=color, opacity=opacity)
-
-            updated_surface.blit(line_surface, (0, current_height))
-            current_height += height_per_letter
-
-        self.surface = updated_surface
-        self.pixel_height += add_height
-            
-        
-
-
-

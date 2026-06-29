@@ -179,6 +179,22 @@ def alpha_blend(surface : Surface, color : Color, copy : bool = True) -> Surface
         
     return surface
 
+def reshape(surface : Surface, shape : Coords) -> Surface:
+    '''Reshapes a copy of the given Surface to the given shape, returns.
+    
+    Parameters
+    ----------
+        surface : Surface
+            The surface to reshape.
+        shape : Coords
+            The desired end shape.
+    
+    Returns
+    -------
+        The reshaped surface.
+    '''
+
+    return pg.transform.scale(surface=surface, size=shape)
 
 # adds and subtracts coordinate tuples
 
@@ -238,3 +254,64 @@ def mul(c1 : Coords, c2 : Coords) -> Coords:
         )
     '''
     return (c1[0] * c2[0], c1[1] * c2[1])
+
+def neg(c : Coords) -> Coords:
+    '''Flips the sign of a set of coordinates.
+    
+    Parameters
+    ----------
+        c : Coords
+            The set of coordinates.
+    
+    Returns
+    -------
+    >>> (
+            -c[0],
+            -c[1]
+        )
+    '''
+    return (-c[0], -c[1])
+
+def mins(c1 : Coords, c2 : Coords) -> Coords:
+    '''Reduces to the minimum value termwise.
+    
+    Parameters
+    ----------
+        c1 : Coords
+            The first set of coordinates.
+        c2 : Coords 
+            The second set of coordinates.
+    
+    Returns
+    -------
+    >>> (
+            min(c1[0], c2[0]),
+            min(c1[1], c2[1])
+        )
+    '''
+    return (
+        min(c1[0], c2[0]),
+        min(c1[1], c2[1])
+    )
+
+def maxs(c1 : Coords, c2 : Coords) -> Coords:
+    '''Reduces to the maximum value termwise.
+    
+    Parameters
+    ----------
+        c1 : Coords
+            The first set of coordinates.
+        c2 : Coords 
+            The second set of coordinates.
+    
+    Returns
+    -------
+    >>> (
+            max(c1[0], c2[0]),
+            max(c1[1], c2[1])
+        )
+    '''
+    return (
+        max(c1[0], c2[0]),
+        max(c1[1], c2[1])
+    )
