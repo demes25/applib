@@ -6,7 +6,7 @@ from typing import Dict, List
 from pathlib import Path 
 from collections import UserDict
 
-from .utils import Color, Coords, Surface, new_surface, alpha_blend, reshape
+from .utils import Color, Coords, Surface, new_surface, alpha_blend, reshape, scale
 
 import pygame as pg 
 
@@ -127,7 +127,7 @@ class Alphabet(UserDict):
         raise PermissionError('Alphabet objects are immutable.')
     
 
-    def get_scaled(
+    def get_reshaped(
         self,
         shape : Coords | None, # pixel-dimensions height of each letter
     ) -> Dict[str, Surface]:
@@ -204,7 +204,7 @@ class Font(UserDict):
 
         self.gap_size = fontsize // self.alphabet.glyph_height # we leave gaps, equivalent to one alphabet-pixel in between.
 
-        self.data = self.alphabet.get_scaled(shape=self.glyph_shape)
+        self.data = self.alphabet.get_reshaped(shape=self.glyph_shape)
 
     
     def render(

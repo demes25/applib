@@ -214,7 +214,6 @@ def reshape(surface : Surface, shape : Coords) -> Surface:
     return pg.transform.scale(surface=surface, size=shape)
 
 
-
 def hadamard(v1 : Vector, v2 : Vector) -> Vector:
     '''Multiplies two Vectors termwise.
     
