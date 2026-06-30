@@ -1,5 +1,5 @@
 # Demetre Seturidze
-# GameLib
+# AppLib
 # Objects and Structures
 
 from typing import Any, Union, Iterable, TYPE_CHECKING, Callable

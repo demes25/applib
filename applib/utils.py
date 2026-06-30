@@ -1,5 +1,5 @@
 # Demetre Seturidze
-# GameLib
+# AppLib
 # Tools -- for loading and manipulating assets
 
 from typing import Callable, Any

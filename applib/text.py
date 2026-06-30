@@ -1,5 +1,5 @@
 # Demetre Seturidze
-# GameLib
+# AppLib
 # Text -- text windows and manipulation.
 
 from .fonts import Font 

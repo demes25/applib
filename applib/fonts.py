@@ -1,5 +1,5 @@
 # Demetre Seturidze
-# GameLib
+# AppLib
 # Fonts
 
 from typing import Dict, List 

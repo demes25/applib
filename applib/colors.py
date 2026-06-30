@@ -1,5 +1,5 @@
 # Demetre Seturidze
-# GameLib
+# AppLib
 # Colors
 
 from dataclasses import dataclass
