@@ -2,10 +2,10 @@
 # GameLib
 # Text -- text windows and manipulation.
 
-from gamelib.fonts import Font 
-from gamelib.colors import Color
-from gamelib.utils import new_surface, alpha_blend, Coords, Surface
-from gamelib.objects import Object
+from .fonts import Font 
+from .colors import Color
+from .utils import new_surface, alpha_blend, Coords, Surface
+from .objects import Object
        
 # carries a buffer that dynamically writes onto a fixed-width object.
 class TextEntry(Object):

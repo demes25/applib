@@ -4,9 +4,11 @@
 
 from typing import Dict, List 
 from pathlib import Path 
-import pygame as pg 
-from .utils import Color, Coords, Surface, new_surface, alpha_blend, reshape
 from collections import UserDict
+
+from .utils import Color, Coords, Surface, new_surface, alpha_blend, reshape
+
+import pygame as pg 
 
 
 # we load an ALPHABET, as well as some additional metadata.

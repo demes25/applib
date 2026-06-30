@@ -4,6 +4,7 @@
 
 from typing import Any, Union, Iterable, TYPE_CHECKING, Callable
 from abc import ABC, abstractmethod
+
 from .utils import Surface, Coords, Vector, ZERO_VEC, new_surface, fill, phase
 from .colors import Color
 

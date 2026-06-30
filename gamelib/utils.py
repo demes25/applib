@@ -3,9 +3,11 @@
 # Tools -- for loading and manipulating assets
 
 from typing import Callable, Any
-from .colors import Color
-import pygame as pg
 from pathlib import Path 
+
+import pygame as pg
+
+from .colors import Color
 
 # TODO: add pg.Vector2 functionality - better than numpy.
 
