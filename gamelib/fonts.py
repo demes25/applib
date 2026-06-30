@@ -5,7 +5,7 @@
 from typing import Dict, List 
 from pathlib import Path 
 import pygame as pg 
-from gamelib.utils import Color, Coords, Surface, new_surface, alpha_blend, reshape
+from .utils import Color, Coords, Surface, new_surface, alpha_blend, reshape
 from collections import UserDict
 
 

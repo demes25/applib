@@ -1,12 +1,12 @@
-from gamelib.objects import Environment, Object, View
-from gamelib.colors import Color
-from gamelib.utils import add, sub
+from .objects import Environment, Object, View
+from .colors import Color
+from .utils import Vector, hadamard
 
 import pygame as pg
 
 
 
-e = Environment((128, 128))
+e = Environment((500, 500))
 v = View((248, 248), e)
 
 sube = Object((248, 248))
@@ -31,7 +31,8 @@ e.fill(black)
 
 se = Environment((496, 496))
 se['v'] = v 
-v.center = sub(se.midpoint, (15, 23))
+e.center = v.midpoint
+v.center = se.midpoint - (15, 23)
 
 se.fill(green)
 
@@ -42,38 +43,22 @@ screen = pg.display.set_mode((496, 496))
 shifting = False
 scrolling = False
 
-prev_pos = (0, 0)
+prev_pos = v.origin
+
+scroll_velocity = Vector(-3, 3)
+c = pg.time.Clock()
+c.tick(120)
 
 while True:
     for event in pg.event.get():
         if event.type == pg.QUIT:
             quit()
-        if event.type == pg.MOUSEBUTTONDOWN:
-            if obj.hits(event.pos):
-                print('CLICK')
-                shifting = False 
-                scrolling = True 
-                prev_pos = event.pos
-            if e.hits(event.pos) and not obj.hits(event.pos):
-                print('CLICK')
-                shifting = True
-                scrolling = False
-                prev_pos = event.pos 
-        
-        if event.type == pg.MOUSEBUTTONUP:
-            shifting = False
-            scrolling = False
+        if event.type == pg.MOUSEWHEEL:
+            if v.hits(Vector(pg.mouse.get_pos())):
+                diff = Vector(event.x, event.y)
+                v.scroll(hadamard(scroll_velocity, diff))
     
     screen.fill((0,0,0))
-
-    if shifting:
-        curr_pos = pg.mouse.get_pos()
-        v.shift(sub(curr_pos, prev_pos))
-        prev_pos = curr_pos
-    elif scrolling:
-        curr_pos = pg.mouse.get_pos()
-        v.scroll(sub(curr_pos, prev_pos))
-        prev_pos = curr_pos
 
     se.blit_onto(screen)
     pg.display.flip()
