@@ -1,6 +1,6 @@
-from .objects import Environment, Object, View
-from .colors import Color
-from .utils import Vector, hadamard
+from applib.objects import Environment, Object, View
+from applib.colors import Color
+from applib.utils import Vector, hadamard
 
 import pygame as pg
 
