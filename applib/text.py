@@ -160,13 +160,15 @@ class TextEntry(Object):
         return string 
     
 
+# TODO: maybe reintroduce histories in a smarter way... right now it doesn't make too much sense to have them...
+
 class TextRecord(Object):
     def __init__(
         self, 
         font : Font,
         width : int, # a fixed width for the environment
         text_gap_ratio : float = 5.0, # the ratio of the gap between texts to the gap between lines
-        
+
         origin : Vector = ZERO_VEC
     ):
         self.augmented_glyph_width = font.glyph_width + font.gap_size
