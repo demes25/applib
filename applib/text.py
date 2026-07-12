@@ -166,9 +166,7 @@ class TextRecord(Object):
         font : Font,
         width : int, # a fixed width for the environment
         text_gap_ratio : float = 5.0, # the ratio of the gap between texts to the gap between lines
-
-        history : list[tuple[list[str], Color]] | None = None,
-
+        
         origin : Vector = ZERO_VEC
     ):
         self.augmented_glyph_width = font.glyph_width + font.gap_size
@@ -176,13 +174,11 @@ class TextRecord(Object):
 
         self.glyphs_per_line = (width + font.gap_size) // self.augmented_glyph_width
         
-        
-
         super().__init__((width, font.glyph_height), origin=origin)
 
         self.font = font 
 
-        self.history : list[tuple[list[str], Color]]= history or []
+        self.num_lines = 0
 
         self.additional_gap = int(text_gap_ratio*font.gap_size)
 
@@ -190,7 +186,7 @@ class TextRecord(Object):
         lines = self.font.as_lines(string, glyphs_per_line=self.glyphs_per_line)
 
         h = len(lines)
-        if len(self.history) == 0:
+        if self.num_lines == 0:
             h -= 1
             current_height = 0
         else:
@@ -198,9 +194,7 @@ class TextRecord(Object):
 
         add_height = h * self.augmented_glyph_height + self.additional_gap
 
-        self.history.append((
-            lines, color
-        ))
+        self.num_lines += len(lines)
 
         updated_surface = new_surface((self.width, self.height + add_height))
         updated_surface.blit(self.surface, (0, 0))
