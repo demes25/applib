@@ -2,7 +2,7 @@
 # AppLib
 # Objects and Structures
 
-from typing import Any, Union, Iterable, TYPE_CHECKING, Callable
+from typing import Any, Union, Iterable, TYPE_CHECKING, Callable, Literal
 from abc import ABC, abstractmethod
 
 from .utils import Surface, Coords, Vector, ZERO_VEC, new_surface, fill, phase
@@ -64,8 +64,23 @@ class Object:
         else:
             surface = new_surface(surface_or_shape)
 
+        self._set(surface)
+
+        object.__setattr__(self, 'origin', origin.copy())
+
+        self.__container__ = None
+
+        super().__init__()
+    
+    def _set(self, surface : Surface, fixed : Literal['topleft', 'topright', 'bottomleft', 'bottomright', 'center'] | None = None):
         self.surface = surface
-        self.rect = surface.get_rect()
+        
+        if fixed is not None:
+            f = getattr(self.rect, fixed)
+            self.rect = surface.get_rect()
+            setattr(self.rect, fixed, f)
+        else:
+            self.rect = surface.get_rect()
 
         # INTRINSIC 
 
@@ -73,14 +88,8 @@ class Object:
         self.midpoint = self.shape / 2
 
         # EXTRINSIC
+        object.__setattr__(self, 'pos', Vector(self.rect.topleft))
 
-        object.__setattr__(self, 'pos', Vector(self.rect.topleft)) 
-        object.__setattr__(self, 'origin', origin.copy())
-
-        self.__container__ = None
-
-        super().__init__()
-    
 
     # we make it so that any reference to the edges of the surface points immediately through self.rect
     def __getattr__(self, name : str) -> Any:
@@ -563,7 +572,7 @@ class Environment(Structure, UserDict[str, Object]):
 
     @property
     def _internal_iter(self) -> Iterable[Object]:
-        return self.data.values()
+        return tuple(self.values())
 
     # internal objects are blitted in the order of self._internals
     def __setitem__(self, key : str, val : Object):

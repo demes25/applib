@@ -202,7 +202,7 @@ class Font(UserDict):
         
         self.glyph_shape = (self.glyph_width, self.glyph_height)
 
-        self.gap_size = fontsize // self.alphabet.glyph_height # we leave gaps, equivalent to one alphabet-pixel in between.
+        self.gap_size = round(0.499 + fontsize / self.alphabet.glyph_height) # we leave gaps, equivalent to one alphabet-pixel in between.
 
         self.data = self.alphabet.get_reshaped(shape=self.glyph_shape)
 

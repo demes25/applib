@@ -4,7 +4,7 @@
 
 from .fonts import Font 
 from .colors import Color
-from .utils import new_surface, alpha_blend, Coords, Surface
+from .utils import new_surface, alpha_blend, Coords, Surface, Vector, ZERO_VEC
 from .objects import Object
        
 # carries a buffer that dynamically writes onto a fixed-width object.
@@ -14,21 +14,18 @@ class TextEntry(Object):
         font : Font, 
         width : int, # a fixed width for the font environment
 
-        color : Color | None = None,
+        color : Color,
 
-        origin : Coords = (0, 0)
+        origin : Vector = ZERO_VEC
     ):
-        self.augmented_glyph_width = font.glyph_height + font.gap_size
-        self.augmented_glyph_height = font.glyph_width + font.gap_size
+        self.augmented_glyph_width = font.glyph_width + font.gap_size
+        self.augmented_glyph_height = font.glyph_height + font.gap_size
 
         self.glyphs_per_line = (width + font.gap_size) // self.augmented_glyph_width
 
-        self.width = width
-        self.height = font.glyph_height
-
         self.font = font 
         self.color = color 
-        super().__init__(self.shape, origin=origin)
+        super().__init__((width, font.glyph_height), origin=origin)
 
         self.string : str = ''
         self.lengths = []
@@ -38,23 +35,19 @@ class TextEntry(Object):
         _pointer = new_surface((font.gap_size, font.glyph_height))
         _pointer.fill((0, 0, 0))
 
-        self.pointer_surface = alpha_blend(_pointer, color=color, opacity=200)
+        self.pointer_surface = alpha_blend(_pointer, color=color.new_opacity(200))
         self.pointer_coords = (0, 0)
         self.pointer_shown = False
-
-    @property
-    def shape(self) -> Coords:
-        return self.width, self.height
 
     def pointer_to_coord(self, pointer : int) -> Coords:
         y_coord = 0
 
         for l in self.lengths:
             if pointer > l:
-                pointer -= l
-                y_coord += self.font.glyph_height + self.font.gap_size
+                pointer -= (l+1) 
+                y_coord += self.augmented_glyph_height
         
-        x_coord = pointer * (self.font.glyph_height + self.font.gap_size) - self.font.gap_size
+        x_coord = pointer * (self.augmented_glyph_width) - self.font.gap_size
 
         return (x_coord, y_coord)
 
@@ -66,6 +59,9 @@ class TextEntry(Object):
         pointer = x_coord // (self.font.glyph_width + self.font.gap_size)
         if height > 0:
             pointer += sum(self.lengths[:height])
+
+        return min(len(self.string), pointer)
+    
     
     def blit_onto(self, dest : Surface | Object):
         surface = self.surface.copy()
@@ -79,15 +75,16 @@ class TextEntry(Object):
 
     
 
-    def _update_lines_and_get(self) -> list[str]:
+    def _update_lines_and_get(self) -> tuple[list[str], int]:
         lines = self.font.as_lines(self.string, self.glyphs_per_line)
         self.lengths = [len(line) for line in lines]
-        self.height = max(len(self.lengths), 1) * self.augmented_glyph_height - self.font.gap_size
-        return lines
+        height = max(self.font.glyph_height, len(self.lengths) * self.augmented_glyph_height - self.font.gap_size)
+
+        return lines, height
     
-    def _update_surface(self, lines : list[str]):
+    def _update_surface(self, lines : list[str], height : int):
         Y = 0
-        surface = new_surface(self.shape)
+        surface = new_surface((self.width, height))
 
         for line in lines:
             surface.blit(
@@ -95,13 +92,18 @@ class TextEntry(Object):
             )
             Y += self.augmented_glyph_height
 
-        self.surface = alpha_blend(surface, color=self.color)
-
-    def _update(self):
-        lines = self._update_lines_and_get()
-        self._update_surface(lines)
+        self._set(alpha_blend(surface, color=self.color), fixed='topleft')
     
 
+    def _update(self):
+        lines, height = self._update_lines_and_get()
+        self._update_surface(lines, height)
+    
+    
+    def set_ptr(self, i : int):
+        if 0 <= i <= len(self.string): 
+            self.pointer = i
+            self.pointer_coords = self.pointer_to_coord(i)
 
     def move_ptr_left(self):
         if self.pointer > 0:
@@ -138,10 +140,10 @@ class TextEntry(Object):
     def register(self, text : str):
         if text != '':
             self.string = self.string[:self.pointer] + text + self.string[self.pointer:]
-            self.pointer += len(text)
-            self.pointer_coords = self.pointer_to_coord(self.pointer)
 
             self._update()
+            self.pointer += len(text)
+            self.pointer_coords = self.pointer_to_coord(self.pointer)
 
 
     def clear(self) -> str:
@@ -153,9 +155,7 @@ class TextEntry(Object):
 
         self.lengths = []
 
-        self.height = self.font.glyph_height
-
-        self.surface = new_surface(self.shape)
+        self._set(new_surface(self.shape), fixed='topleft')
 
         return string 
     
@@ -165,37 +165,45 @@ class TextRecord(Object):
         self, 
         font : Font,
         width : int, # a fixed width for the environment
-        text_gap_ratio : float = 5.0 # the ratio of the gap between texts to the gap between lines
+        text_gap_ratio : float = 5.0, # the ratio of the gap between texts to the gap between lines
+
+        history : list[tuple[list[str], Color]] | None = None,
+
+        origin : Vector = ZERO_VEC
     ):
-        self.augmented_glyph_width = font.glyph_height + font.gap_size
-        self.augmented_glyph_height = font.glyph_width + font.gap_size
+        self.augmented_glyph_width = font.glyph_width + font.gap_size
+        self.augmented_glyph_height = font.glyph_height + font.gap_size
 
         self.glyphs_per_line = (width + font.gap_size) // self.augmented_glyph_width
         
-        self.width = width
-        self.height = 0
+        
 
-        self.surface = new_surface((width, font.glyph_height))
+        super().__init__((width, font.glyph_height), origin=origin)
+
         self.font = font 
 
-        self.additional_gap = int(text_gap_ratio*font.gap_size)
+        self.history : list[tuple[list[str], Color]]= history or []
 
-    @property
-    def shape(self) -> Coords:
-        return (self.width, self.height)
+        self.additional_gap = int(text_gap_ratio*font.gap_size)
 
     def register(self, string : str, color : Color | None = None):
         lines = self.font.as_lines(string, glyphs_per_line=self.glyphs_per_line)
 
-        add_height = len(lines) * self.augmented_glyph_height + self.additional_gap
+        h = len(lines)
+        if len(self.history) == 0:
+            h -= 1
+            current_height = 0
+        else:
+            current_height = self.height 
 
-        current_height = self.height
-        self.height += add_height
+        add_height = h * self.augmented_glyph_height + self.additional_gap
 
-        updated_surface = new_surface(self.shape)
+        self.history.append((
+            lines, color
+        ))
 
-        if current_height != 0:
-            updated_surface.blit(self.surface, (0, 0))
+        updated_surface = new_surface((self.width, self.height + add_height))
+        updated_surface.blit(self.surface, (0, 0))
         
         for line in lines:
             line_surface = self.font.render(line, color=color)
@@ -203,7 +211,7 @@ class TextRecord(Object):
             updated_surface.blit(line_surface, (0, current_height))
             current_height += self.augmented_glyph_height
 
-        self.surface = updated_surface
+        self._set(updated_surface, fixed='topleft')
             
         
 

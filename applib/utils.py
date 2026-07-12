@@ -87,8 +87,8 @@ def new_surface(shape : Coords):
     return Surface(shape, pg.SRCALPHA)
 
 # returns a function that loads images and scales them to the given dimension
-def scaled_loader(scaling : Coords | tuple[float, float] | int | float | None = None):
-    '''A generator that returns a function that loads images from file paths and scales them to the given shape (if any).
+def loader(scaling : Coords | tuple[float, float] | int | float | None = None) -> Callable[[Path], Surface]:
+    '''A generator that returns a function that loads images from file paths and scales them by the given scaling (if any).
     
     Parameters
     ----------
@@ -105,17 +105,55 @@ def scaled_loader(scaling : Coords | tuple[float, float] | int | float | None = 
     
     elif isinstance(scaling, tuple):
         def _load(path : Path):
-            image = pg.image.load(path)
-            shape = mul(scaling, image.get_rect().size)
-            return pg.transform.scale(pg.image.load(path), shape)
+            surface = pg.image.load(path)
+            shape = surface.get_size()
+
+            shape = (shape[0]*scaling[0], shape[1]*scaling[1])
+
+            return pg.transform.scale(surface, shape)
     
     else:
         def _load(path : Path):
-            image = pg.image.load(path)
-            shape = scale(scaling, image.get_rect().size)
-            return pg.transform.scale(pg.image.load(path), shape)
+            surface = pg.image.load(path)
+            shape = surface.get_size()
+
+            shape = (shape[0] * scaling, shape[1] * scaling)
+
+            return pg.transform.scale(surface, shape)
         
     return _load 
+
+def saver(scaling : Coords | tuple[float, float] | int | float | None = None) -> Callable[[Surface, Path], None]:
+    '''A generator that returns a function that scales images to the given shape (if any) and saves them.
+    
+    Parameters
+    ----------
+        scaling : Coords | None
+            If not None, the resulting function scales the dimensions of loaded images by the given ratios before saving.
+    
+    Returns
+    -------
+        A function that scales images to the given shape (if any) and saves them.
+    '''
+
+    if scaling is None:
+        return pg.image.save
+    
+    elif isinstance(scaling, tuple):
+        def _save(surface : Surface, path : Path):
+            shape = surface.get_size()
+            shape = (shape[0]*scaling[0], shape[1]*scaling[1])
+            surface = pg.transform.scale(surface, shape)
+            pg.image.save(surface, path)
+    
+    else:
+        def _save(surface : Surface, path : Path):
+            shape = surface.get_size()
+            shape = (shape[0]*scaling, shape[1]*scaling)
+            surface = pg.transform.scale(surface, shape)
+            pg.image.save(surface, path)
+        
+    return _save 
 
 # tints an image in-place (and returns)
 def phase(surface : Surface, color : Color, copy : bool = True) -> Surface:
@@ -213,6 +251,28 @@ def reshape(surface : Surface, shape : Coords) -> Surface:
 
     return pg.transform.scale(surface=surface, size=shape)
 
+def scale(surface : Surface, scaling : Coords | tuple[float, float] | int | float) -> Surface:
+    '''Scales a copy of the given Surface by the given ratios.
+    
+    Parameters
+    ----------
+        scaling : Coords | tuple[float, float] | int | float
+            The scaling ratios. If an integer or float, scales both dimensions by the same number. Otherwise, scales each dimension by the corresponding ratio.
+    
+    Returns
+    -------
+        The scaled surface.
+    '''
+
+    shape = surface.get_size()
+    
+    if isinstance(scaling, tuple):
+        shape = (shape[0]*scaling[0], shape[1]*scaling[1])
+    else:
+        shape = (int(shape[0]*scaling), int(shape[1]*scaling))
+
+    return pg.transform.scale(surface=surface, size=shape)
+
 
 def hadamard(v1 : Vector, v2 : Vector) -> Vector:
     '''Multiplies two Vectors termwise.
@@ -229,159 +289,3 @@ def hadamard(v1 : Vector, v2 : Vector) -> Vector:
     >>> Vector(v1.x * v2.x, v1.y * v2.y)
     '''
     return Vector(v1.x * v2.x, v1.y * v2.y)
-
-# TUPLE MANIPULATORS
-
-def add(c1 : Coords, c2 : Coords) -> Coords:
-    '''Adds two sets of coordinates termwise.
-    
-    Parameters
-    ----------
-        c1 : Coords 
-            The augend.
-        c2 : Coords
-            The addend.
-    
-    Returns
-    -------
-    >>> (
-            c1[0] + c2[0], 
-            c1[1] + c2[1]
-        )
-    '''
-    return (c1[0] + c2[0], c1[1] + c2[1])
-
-def sub(c1 : Coords, c2 : Coords) -> Coords:
-    '''Subtracts two sets of coordinates termwise.
-    
-    Parameters
-    ----------
-        c1 : Coords 
-            The minuend.
-        c2 : Coords
-            The subtrahend.
-    
-    Returns
-    -------
-    >>> (
-            c1[0] - c2[0], 
-            c1[1] - c2[1]
-        )
-    '''
-    return (c1[0] - c2[0], c1[1] - c2[1])
-
-def mul(a : Coords | tuple[float, float], c : Coords) -> Coords:
-    '''Multiplies two sets of coordinates, or a pair of floats and a set of coordinates, termwise.
-    
-    Parameters
-    ----------
-        a : Coords | tuple[float, float] 
-            The multiplier.
-        c : Coords
-            The multiplicand.
-    
-    Returns
-    -------
-    >>> (
-            int(a[0] * c[0]), 
-            int(a[1] * c[1])
-        )
-    '''
-    return (int(a[0] * c[0]), int(a[1] * c[1]))
-
-def scale(a : int | float, c : Coords) -> Coords:
-    '''Scales a set of coordinates by the given scalar.
-    
-    Parameters
-    ----------
-        a : int | float 
-            The scalar.
-        c : Coords
-            The coordinates to scale.
-    
-    Returns
-    -------
-    >>> (
-            int(a * c[0]), 
-            int(a * c[1])
-        )
-    '''
-    return (int(a*c[0]), int(a*c[1]))
-
-
-def mul_or_scale(a : int | float | Coords | tuple[float, float], c : Coords) -> Coords:
-    '''Scales a set of coordinates by the given scalar, or termwise given a set of coordinates or a pair of floats.
-    
-    Parameters
-    ----------
-        a : int | float | tuple[float, float] | Coords
-            The scalar.
-        c : Coords
-            The coordinates to scale.
-    
-    Returns
-    -------
-    >>> mul(a, c) if isinstance(a, tuple) else scale(a, c)
-    '''
-    return mul(a, c) if isinstance(a, tuple) else scale(a, c)
-    
-def neg(c : Coords) -> Coords:
-    '''Flips the sign of a set of coordinates.
-    
-    Parameters
-    ----------
-        c : Coords
-            The set of coordinates.
-    
-    Returns
-    -------
-    >>> (
-            -c[0],
-            -c[1]
-        )
-    '''
-    return (-c[0], -c[1])
-
-def mins(c1 : Coords, c2 : Coords) -> Coords:
-    '''Reduces to the minimum value termwise.
-    
-    Parameters
-    ----------
-        c1 : Coords
-            The first set of coordinates.
-        c2 : Coords 
-            The second set of coordinates.
-    
-    Returns
-    -------
-    >>> (
-            min(c1[0], c2[0]),
-            min(c1[1], c2[1])
-        )
-    '''
-    return (
-        min(c1[0], c2[0]),
-        min(c1[1], c2[1])
-    )
-
-def maxs(c1 : Coords, c2 : Coords) -> Coords:
-    '''Reduces to the maximum value termwise.
-    
-    Parameters
-    ----------
-        c1 : Coords
-            The first set of coordinates.
-        c2 : Coords 
-            The second set of coordinates.
-    
-    Returns
-    -------
-    >>> (
-            max(c1[0], c2[0]),
-            max(c1[1], c2[1])
-        )
-    '''
-    return (
-        max(c1[0], c2[0]),
-        max(c1[1], c2[1])
-    )

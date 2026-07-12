@@ -4,6 +4,7 @@
 
 from dataclasses import dataclass
 from functools import cached_property
+from typing import Sequence
 
 @dataclass(frozen=True)
 class Color:
@@ -81,6 +82,3 @@ hex : str
             >>> Color(self.r, self.g, self.b, alpha)
         '''
         return Color(self.r, self.g, self.b, alpha)
-
-
-        
