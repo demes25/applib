@@ -2,7 +2,7 @@
 # AppLib
 # Objects and Structures
 
-from typing import Any, Union, Iterable, TYPE_CHECKING, Callable, Literal
+from typing import Any, Union, Iterable, Iterator, TYPE_CHECKING, Callable, Literal
 from abc import ABC, abstractmethod
 
 from .utils import Surface, Coords, Vector, ZERO_VEC, new_surface, fill, phase
@@ -253,7 +253,7 @@ class Object:
 
 
 # an object that contains other objects, adjusts origins, etc.
-class Structure(Object, ABC):
+class Structure(Object, Iterable[Object], ABC):
     '''An Object that holds other Objects and may simultanenously manipulate them.
 
     Each time that the position of this Structure is changed, the origins of its contained Objects are recursively updated.
@@ -265,9 +265,8 @@ class Structure(Object, ABC):
     ):
         super().__init__(surface_or_shape, origin=origin)
     
-    @property
     @abstractmethod
-    def _internal_iter(self) -> Iterable[Object]:
+    def __iter__(self) -> Iterator[Object]:
         pass 
 
 
@@ -278,7 +277,7 @@ class Structure(Object, ABC):
             self.rect.topleft = value
             object.__setattr__(self, 'pos', value)
             
-            for internal in self._internal_iter:
+            for internal in self:
                 internal._shift_origin(diff)
 
     def _set_rect_attr(self, name, value):
@@ -291,7 +290,7 @@ class Structure(Object, ABC):
 
             diff = self.pos - pos
             
-            for internal in self._internal_iter:
+            for internal in self:
                 internal._shift_origin(diff)
 
                 
@@ -299,7 +298,7 @@ class Structure(Object, ABC):
         if displacement != ZERO_VEC:
             object.__setattr__(self, 'origin', self.origin + displacement)
 
-            for internal in self._internal_iter:
+            for internal in self:
                 internal._shift_origin(displacement)
 
     def _set_origin(self, origin : Vector):  
@@ -311,7 +310,7 @@ class Structure(Object, ABC):
     def _recurse_color_func(self, _color_func : Callable[['Object', Color], None], color : Color, recursion_depth : int = 0):
         _color_func(self, color)
         if recursion_depth != 0:
-            for internal in self._internal_iter:
+            for internal in self:
                 internal._recurse_color_func(_color_func, color, recursion_depth-1)
 
 
@@ -383,7 +382,7 @@ class Structure(Object, ABC):
             object.__setattr__(self, 'pos', self.pos + displacement)
             self.rect.topleft = self.pos
 
-            for internal in self._internal_iter:
+            for internal in self:
                 internal._shift_origin(displacement)
 
     def blit_onto(self, dest : Union['Object', Surface]):
@@ -397,7 +396,7 @@ class Structure(Object, ABC):
         '''
         surface = self.surface.copy()
 
-        for internal in self._internal_iter:
+        for internal in self:
             internal.blit_onto(surface)
         
         if isinstance(dest, Object):
@@ -428,9 +427,8 @@ class View(Structure):
         super().__init__(surface_or_shape, origin=origin)
         self.item = item
     
-    @property
-    def _internal_iter(self) -> Iterable[Object]:
-        return (self.item,)
+    def __iter__(self) -> Iterator[Object]:
+        yield self.item
 
 
     def __setattr__(self, name: str, value: Any):
@@ -482,9 +480,8 @@ class Array(Structure, UserList[Object]):
         UserList.__init__(self)
 
 
-    @property
-    def _internal_iter(self) -> Iterable[Object]:
-        return self.data
+    def __iter__(self) -> Iterator[Object]:
+        yield from self.data
 
     # internal objects are blitted in the order of self.data
     def __setitem__(self, key : int, val : Object):
@@ -570,9 +567,8 @@ class Environment(Structure, UserDict[str, Object]):
         super().__init__(surface_or_shape, origin=origin)
         UserDict.__init__(self)
 
-    @property
-    def _internal_iter(self) -> Iterable[Object]:
-        return tuple(self.values())
+    def __iter__(self) -> Iterator[Object]:
+        yield from self.values()
 
     # internal objects are blitted in the order of self._internals
     def __setitem__(self, key : str, val : Object):

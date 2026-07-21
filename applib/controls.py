@@ -1,27 +1,27 @@
 import pygame as pg 
-from pygame.locals import *
-from typing import Protocol, runtime_checkable, Any, Callable
+from typing import Any, Callable, Generic, TypeVar
+from abc import ABC, abstractmethod
 
-Event = pg.event.Event
-events = pg.event.get 
+EventUI = pg.event.Event
+fetch = pg.event.get 
 
+T = TypeVar('T')
 
-def standard_global_handler(event : Event, _ : list[Any]):
-    if event.type == QUIT:
-        quit()
+class Controllable(ABC, Generic[T]):
+    def global_handle(self, event : EventUI, _ : list[T]):
+        if event.type == pg.QUIT:
+            quit()
     
-@runtime_checkable
-class Controllable(Protocol):
+    @abstractmethod
+    def handle(self, event : EventUI, queue : list[T]):
+        pass
 
-    def handle(event : Event, queue : list[Any]):
-        ...
-
-
-def controller(global_handler = standard_global_handler) -> Callable[[Controllable], list[Any]]:
-    def process(controllable : Controllable):
+    def process(self, events) -> list[T]:
         results = []
-        for event in events():
-            global_handler(event, results)
-            controllable.handle(event, results)
-        return results
-    return process
+
+        for event in events:
+            self.global_handle(event, results)
+            self.handle(event, results)
+        
+        return results 
+
