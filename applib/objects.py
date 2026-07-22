@@ -10,6 +10,7 @@ from .colors import Color
 
 
 RECT_ATTRS = ('topleft', 'topright', 'bottomleft', 'bottomright', 'right', 'left', 'top', 'bottom', 'center', 'width', 'height')
+GLOBAL_RECT_ATTRS = ('global_topleft', 'global_topright', 'global_bottomleft', 'global_bottomright', 'global_right', 'global_left', 'global_top', 'global_bottom', 'global_center')
 
 # wraps a surface to be able to blit/move easier.
 # also makes registering hits easier.
@@ -31,10 +32,21 @@ class Object:
         bottomright : Coords
         center : Coords
 
+        global_topleft : Coords
+        global_topright : Coords 
+        global_bottomleft : Coords
+        global_bottomright : Coords
+        global_center : Coords
+
         right : int 
         left : int 
         top : int 
         bottom : int 
+
+        global_right : int 
+        global_left : int 
+        global_top : int 
+        global_bottom : int 
 
         height : int 
         width : int
@@ -43,6 +55,8 @@ class Object:
         pos : Vector 
         origin : Vector
         midpoint : Vector
+        
+        global_pos : Vector 
 
 
     def __init__(
@@ -112,6 +126,13 @@ class Object:
             self._set_rect_attr(name, value)
 
         else:
+            stem_name = name.removeprefix("global_")
+
+            if stem_name == 'pos':
+                self._set_pos(value, from_global=True)
+            elif stem_name in RECT_ATTRS:
+                self._set_rect_attr(stem_name, value, from_global=True)
+
             object.__setattr__(self, name, value)
 
 
@@ -119,11 +140,17 @@ class Object:
         _color_func(self, color)
 
 
-    def _set_pos(self, value):
+    def _set_pos(self, value, from_global = False):
+        if from_global:
+            value = value - self.origin
+
         object.__setattr__(self, 'pos', value)
         self.rect.topleft = value
 
-    def _set_rect_attr(self, name, value):
+    def _set_rect_attr(self, name, value, from_global = False):
+        if from_global:
+            value = value - self.origin
+
         setattr(self.rect, name, value)
         object.__setattr__(self, 'pos', Vector(self.rect.topleft))
 
@@ -253,7 +280,7 @@ class Object:
 
 
 # an object that contains other objects, adjusts origins, etc.
-class Structure(Object, Iterable[Object], ABC):
+class Structure(ABC, Object, Iterable[Object]):
     '''An Object that holds other Objects and may simultanenously manipulate them.
 
     Each time that the position of this Structure is changed, the origins of its contained Objects are recursively updated.
@@ -325,7 +352,6 @@ class Structure(Object, Iterable[Object], ABC):
         for val in vals:
             val._set_origin(self.origin + self.pos)
             val.__container__ = self
-
     
 
     def phase(self, color : Color, recursion_depth : int = 0):
@@ -568,7 +594,7 @@ class Environment(Structure, UserDict[str, Object]):
         UserDict.__init__(self)
 
     def __iter__(self) -> Iterator[Object]:
-        yield from self.values()
+        yield from self.data.values()
 
     # internal objects are blitted in the order of self._internals
     def __setitem__(self, key : str, val : Object):
@@ -576,7 +602,7 @@ class Environment(Structure, UserDict[str, Object]):
         self.data[key] = val
      
     # returns the key of the hit object. None if none hits
-    def which_hits(self, vec : Vector, prev_vec : Vector | None, from_global : bool = True) -> str | None:
+    def which_hits(self, vec : Vector, prev_vec : Vector | None = None, from_global : bool = True) -> str | None:
         '''The name of the Object in this dictionary that is hit by the given Vectors. Returns None if none of the contained Objects are hit.
         
         Parameters

@@ -1,5 +1,5 @@
 import pygame as pg 
-from typing import Any, Callable, Generic, TypeVar
+from typing import Generic, TypeVar
 from abc import ABC, abstractmethod
 
 EventUI = pg.event.Event
@@ -24,4 +24,5 @@ class Controllable(ABC, Generic[T]):
             self.handle(event, results)
         
         return results 
+
 
