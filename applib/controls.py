@@ -44,9 +44,9 @@ class Focusable(Protocol):
 
 
 from .utils import Surface, Coords, Vector, ZERO_VEC
-from .objects import Environment
+from .objects import Array
 
-class Interface(Environment, Controllable[T]):
+class Interface(Array, Controllable[T]):
     def __init__(
             self, 
             surface_or_shape : Surface | Coords,
@@ -65,6 +65,8 @@ class Interface(Environment, Controllable[T]):
         focus = self[focus_key]
 
         if not isinstance(focus, Controllable):
+            #self.data.remove(focus)
+            #self.data.append(focus)
             self.focus = None 
             return 
         
@@ -73,7 +75,9 @@ class Interface(Environment, Controllable[T]):
                 self.focus.defocus()
                 
             self.focus = focus
-
+            # self.data.remove(focus)
+            # self.data.append(focus)
+            
             if isinstance(focus, Focusable):
                 focus.focus()
         
