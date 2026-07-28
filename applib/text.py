@@ -6,9 +6,11 @@ from .fonts import Font
 from .colors import Color
 from .utils import new_surface, alpha_blend, Coords, Surface, Vector, ZERO_VEC
 from .objects import Object
+from .controls import Controllable, T, EventUI
+import pygame as pg
        
 # carries a buffer that dynamically writes onto a fixed-width object.
-class TextEntry(Object):
+class TextEntry(Object, Controllable[T]):
     def __init__(
         self, 
         font : Font, 
@@ -42,9 +44,12 @@ class TextEntry(Object):
     def pointer_to_coord(self, pointer : int) -> Coords:
         y_coord = 0
 
+        if pointer == 0:
+            return (0, 0)
+
         for l in self.lengths:
             if pointer > l:
-                pointer -= (l+1) 
+                pointer -= l 
                 y_coord += self.augmented_glyph_height
         
         x_coord = pointer * (self.augmented_glyph_width) - self.font.gap_size
@@ -92,7 +97,7 @@ class TextEntry(Object):
             )
             Y += self.augmented_glyph_height
 
-        self._set(alpha_blend(surface, color=self.color), fixed='topleft')
+        self._set(alpha_blend(surface, color=self.color), fixed='bottomright')
     
 
     def _update(self):
@@ -155,9 +160,28 @@ class TextEntry(Object):
 
         self.lengths = []
 
-        self._set(new_surface(self.shape), fixed='topleft')
+        self._set(new_surface(self.shape), fixed='bottomright')
 
         return string 
+
+    def read(self) -> str:
+        return self.string
+
+
+    def handle(self, event : EventUI, _ : list[T]):
+        if event.type == pg.TEXTINPUT:
+            text = event.text
+            self.register(text)
+        
+        if event.type == pg.KEYDOWN:
+            if event.key == pg.K_BACKSPACE:
+                self.backspace()
+
+            if event.key == pg.K_LEFT:
+                self.move_ptr_left()
+            
+            if event.key == pg.K_RIGHT:
+                self.move_ptr_right()
     
 
 # TODO: maybe reintroduce histories in a smarter way... right now it doesn't make too much sense to have them...

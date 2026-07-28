@@ -12,6 +12,8 @@ from .colors import Color
 RECT_ATTRS = ('topleft', 'topright', 'bottomleft', 'bottomright', 'right', 'left', 'top', 'bottom', 'center', 'width', 'height')
 GLOBAL_RECT_ATTRS = ('global_topleft', 'global_topright', 'global_bottomleft', 'global_bottomright', 'global_right', 'global_left', 'global_top', 'global_bottom', 'global_center')
 
+FixablePoint = Literal['topleft', 'topright', 'bottomleft', 'bottomright', 'center']
+
 # wraps a surface to be able to blit/move easier.
 # also makes registering hits easier.
 class Object:
@@ -86,7 +88,7 @@ class Object:
 
         super().__init__()
     
-    def _set(self, surface : Surface, fixed : Literal['topleft', 'topright', 'bottomleft', 'bottomright', 'center'] | None = None):
+    def _set(self, surface : Surface, fixed : FixablePoint | None = None):
         self.surface = surface
         
         if fixed is not None:
@@ -438,6 +440,7 @@ class View(Structure):
         self,
         surface_or_shape : Surface | Coords,
         item : Object,
+        margins : Coords = (0, 0),
         origin : Vector = ZERO_VEC
     ):
         '''Parameters
@@ -447,15 +450,22 @@ class View(Structure):
                 creates a transparent Surface of the given width and height.
             item : Object
                 The Object to hold a view on.
+            margins : Coords
+                The margins to constrain the object in.
             origin : Vector
                 The global Vector of the topleft point of the Structure that stores this Object. By default set to Vector(0, 0) (the topleft of the screen window).
         '''
         super().__init__(surface_or_shape, origin=origin)
-        self.item = item
-    
-    def __iter__(self) -> Iterator[Object]:
-        yield self.item
+        self.margins = margins
+        self.vector_margins = Vector(margins) 
 
+        self.item = item
+        self.item.pos = self.item.pos
+
+        self.item_surface = new_surface((self.width - 2*margins[0], self.height - 2*margins[1]))
+
+    def __iter__(self):
+        yield self.item 
 
     def __setattr__(self, name: str, value: Any):
         # if the value is item, wraps first.    
@@ -465,10 +475,21 @@ class View(Structure):
         else:
             Structure.__setattr__(self, name, value)
 
+    # sets the origin of a newly adding internal object
+    def _wrap(self, val : Object):
+        val._set_origin(self.origin + self.pos + self.vector_margins)
+        val.__container__ = self
+
+    # sets the origin of a list of newly adding internal objects
+    def _wrap_arr(self, vals : Iterable[Object]):
+        for val in vals:
+            val._set_origin(self.origin + self.pos + self.vector_margins)
+            val.__container__ = self
     
     def _clamp(self, displacement : Vector):
+
         max_disp = -self.item.pos
-        min_disp = self.shape - (self.item.pos + self.item.shape)
+        min_disp = self.shape - 2 * self.vector_margins - (self.item.pos + self.item.shape)
 
         x = min(max_disp.x, max(min_disp.x, displacement.x))
         y = min(max_disp.y, max(min_disp.y, displacement.y))
@@ -484,6 +505,25 @@ class View(Structure):
                 The difference between the desired item position and the current item position.
         '''
         self.item.shift(self._clamp(displacement))
+
+    def blit_onto(self, dest : Union['Object', Surface]):
+        surface = self.surface.copy()
+
+        item_surface = self.item_surface.copy()
+        self.item.blit_onto(item_surface)
+
+        surface.blit(item_surface, self.margins)
+
+        for obj in self:
+            if obj is not self.item:
+                obj.blit_onto(surface)
+
+        if isinstance(dest, Object):
+            dest.surface.blit(surface, self.rect)
+        else:
+            dest.blit(surface, self.rect)
+
+    
     
 
         
@@ -537,7 +577,7 @@ class Array(Structure, UserList[Object]):
     
 
     # returns the index of the hit object. -1 if none hits.
-    def which_hits(self, vec : Vector, prev_vec : Vector | None = None, from_global : bool = True) -> int:
+    def which_hits(self, vec : Vector, prev_vec : Vector | None = None, from_global : bool = True, reverse=True) -> int:
         '''The index of the Object in this list that is hit by the given Vectors. Returns -1 if none of the contained Objects are hit.
         
         Parameters
@@ -554,6 +594,9 @@ class Array(Structure, UserList[Object]):
             
             from_global : bool
                 Whether the given Vectors are global (relative to the topleft of the screen).
+            
+            reverse : bool
+                Whether to iterate in reverse order of insertion. Set to true by default.
         
         Returns
         -------
@@ -572,17 +615,23 @@ class Array(Structure, UserList[Object]):
         if prev_vec is not None:
             prev_vec = prev_vec - self.pos
 
-        for index, internal in enumerate(self.data):
-            if internal.hits(vec, prev_vec, from_global=False):
-                return index 
-        
+        if reverse:
+            for i in range(len(self.data)-1, -1, -1):
+                if self.data[i].hits(vec, prev_vec, from_global=False):
+                    return i
+
+        else:
+            for index, internal in enumerate(self.data):
+                if internal.hits(vec, prev_vec, from_global=False):
+                    return index 
+                
         return -1 
 
 
 
 # an environment which contains other objects, adjusts origins, etc
 # stores contained objects in a dict (mutable).
-class Environment(Structure, UserDict[str, Object]):
+class Mapping(Structure, UserDict[str, Object]):
     '''A Structure that holds a dictionary of Objects.
     '''
     def __init__(
@@ -602,7 +651,7 @@ class Environment(Structure, UserDict[str, Object]):
         self.data[key] = val
      
     # returns the key of the hit object. None if none hits
-    def which_hits(self, vec : Vector, prev_vec : Vector | None = None, from_global : bool = True) -> str | None:
+    def which_hits(self, vec : Vector, prev_vec : Vector | None = None, from_global : bool = True, reverse : bool = True) -> str | None:
         '''The name of the Object in this dictionary that is hit by the given Vectors. Returns None if none of the contained Objects are hit.
         
         Parameters
@@ -619,6 +668,9 @@ class Environment(Structure, UserDict[str, Object]):
             
             from_global : bool
                 Whether the given Vectors are global (relative to the topleft of the screen).
+            
+            reverse : bool
+                Whether to iterate in reverse order of insertion. Set to true by default.
         
         Returns
         -------
@@ -637,8 +689,13 @@ class Environment(Structure, UserDict[str, Object]):
         if prev_vec is not None:
             prev_vec = prev_vec - self.pos
 
-        for key, internal in self.data.items():
-            if internal.hits(vec, prev_vec, from_global=False):
-                return key 
+        if reverse:
+            for key, internal in reversed(self.data.items()):
+                if internal.hits(vec, prev_vec, from_global=False):
+                    return key 
+        else:
+            for key, internal in self.data.items():
+                if internal.hits(vec, prev_vec, from_global=False):
+                    return key 
         
         return None

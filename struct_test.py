@@ -1,4 +1,4 @@
-from applib.objects import Environment, Object, View
+from applib.objects import Mapping, Object, View
 from applib.colors import Color
 from applib.utils import Vector, hadamard
 
@@ -6,7 +6,7 @@ import pygame as pg
 
 
 
-e = Environment((500, 500))
+e = Mapping((500, 500))
 v = View((248, 248), e)
 
 sube = Object((248, 248))
@@ -29,7 +29,7 @@ obj.fill(red)
 sube.fill(blue)
 e.fill(black)
 
-se = Environment((496, 496))
+se = Mapping((496, 496))
 se['v'] = v 
 e.center = v.midpoint
 v.center = se.midpoint - (15, 23)
